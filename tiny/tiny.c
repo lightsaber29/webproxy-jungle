@@ -17,12 +17,13 @@ void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
 int main(int argc, char **argv) {
+  signal(SIGPIPE, SIG_IGN);
   int listenfd, connfd;
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
 
-  /* Check command line args */
+  /* 실행 시 인수로 포트번호가 들어오지 않았을 경우 exit */
   if (argc != 2) {
     fprintf(stderr, "usage: %s <port>\n", argv[0]);
     exit(1);
@@ -43,16 +44,19 @@ int main(int argc, char **argv) {
  * doit - handle one HTTP request/response transaction
  */
 void doit(int fd) {
+  signal(SIGPIPE, SIG_IGN);
   int is_static;
   struct stat sbuf;
   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
   char filename[MAXLINE], cgiargs[MAXLINE];
   rio_t rio;
 
-  /* Read request line and headers */
+  /* Read request line and headers   */
   Rio_readinitb(&rio, fd);
   Rio_readlineb(&rio, buf, MAXLINE);             // line:netp:doit:readrequest
+  // 여기서 요청을 읽고 HTTP 메소드, URI, HTTP 버전을 파싱
   sscanf(buf, "%s %s %s", method, uri, version); // line:netp:doit:parserequest
+  printf(":: %s %s %s ::\n", method, uri, version);
   if (strcasecmp(method, "GET")) { // line:netp:doit:beginrequesterr
     clienterror(fd, method, "501", "Not Implemented", "Tiny does not implement this method");
     return;
@@ -130,12 +134,18 @@ int parse_uri(char *uri, char *filename, char *cgiargs) {
  * serve_static - copy a file back to the client
  */
 void serve_static(int fd, char *filename, int filesize) {
-  int srcfd;
+  int srcfd, n;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
+
+  /* 파일 전송을 위한 청크 크기 설정 (예: 8192 바이트) */
+  const int CHUNK_SIZE = MAXBUF;
+  char chunk[CHUNK_SIZE];
+  int remaining_size = filesize;
 
   /* Send response headers to client */
   get_filetype(filename, filetype);    // line:netp:servestatic:getfiletype
-  sprintf(buf, "HTTP/1.0 200 OK\r\n"); // line:netp:servestatic:beginserve
+  // 서버 응답 버전 명시
+  sprintf(buf, "HTTP/1.0 200 OK\r\n"); // 여기 바꾸면 http 프로토콜 바뀜
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
@@ -153,15 +163,37 @@ void serve_static(int fd, char *filename, int filesize) {
  * get_filetype - derive file type from file name
  */
 void get_filetype(char *filename, char *filetype) {
-  if (strstr(filename, ".html")) {
-    strcpy(filetype, "text/html");
-  } else if (strstr(filename, ".gif")) {
-    strcpy(filetype, "image/gif");
-  } else if (strstr(filename, ".jpg")) {
-    strcpy(filetype, "image/jpeg");
+  // 파일명 내에서 마지막 . 찾기 -> 파일명 중간에 확장자가 들어가는 케이스 방어
+  char *ext = strrchr(filename, '.');
+
+  if (ext != NULL) {
+    if (strcmp(ext, ".html") == 0) {
+      strcpy(filetype, "text/html");
+    } else if (strcmp(ext, ".gif") == 0) {
+      strcpy(filetype, "image/gif");
+    } else if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) {
+      strcpy(filetype, "image/jpeg");
+    } else if (strcmp(ext, ".mp4") == 0) {
+      strcpy(filetype, "video/mp4");
+    } else {
+      strcpy(filetype, "text/plain");
+    }
   } else {
+    // 확장자가 없을 경우 기본 값
     strcpy(filetype, "text/plain");
   }
+
+  // if (strstr(filename, ".html")) {
+  //   strcpy(filetype, "text/html");
+  // } else if (strstr(filename, ".gif")) {
+  //   strcpy(filetype, "image/gif");
+  // } else if (strstr(filename, ".jpg")) {
+  //   strcpy(filetype, "image/jpeg");
+  // } else if (strstr(filename, ".mp4")) {
+  //   strcpy(filetype, "video/mp4");
+  // } else {
+  //   strcpy(filetype, "text/plain");
+  // }
 }
 
 /*
@@ -171,6 +203,7 @@ void serve_dynamic(int fd, char *filename, char *cgiargs) {
   char buf[MAXLINE], *emptylist[] = {NULL};
 
   /* Return first part of HTTP response */
+  // 서버 응답 버전 명시
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Server: Tiny Web Server\r\n");
