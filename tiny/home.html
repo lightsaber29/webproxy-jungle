@@ -1,7 +1,21 @@
 <html>
-<head><title>test</title></head>
-<body> 
-<img align="middle" src="godzilla.gif">
-Dave O'Hallaron
-</body>
+    <head>
+        <title>test</title>
+    </head>
+    <body> 
+        <img align="middle" src="godzilla.gif">
+        Dave O'Hallaron
+
+        <input type = "text" id="first" size="10">
+        <input type = "text" id="second" size="10">
+        <button onclick="change()">adder</button>
+    </body>
 </html>
+
+<script>
+    function change() {
+        let arg1 = document.getElementById("first").value;
+        let arg2 = document.getElementById("second").value;
+        document.location.href=`./cgi-bin/adder?${arg1}&${arg2}`; 
+    }
+</script>
