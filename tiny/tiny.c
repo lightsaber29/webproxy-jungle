@@ -72,10 +72,11 @@ void doit(int fd) {
   Rio_readinitb(&rio, fd);
   Rio_readlineb(&rio, buf, MAXLINE);
   sscanf(buf, "%s %s %s", method, uri, version);
+  // 숙제문제 11.6
   printf(":: %s %s %s ::\n", method, uri, version);
   
   // tiny 는 GET 메소드 이외에는 오류로 떨어트림
-  // 연습문제 11.11 - HEAD 메소드 추가
+  // 숙제문제 11.11 - HEAD 메소드 추가
   if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) {
     clienterror(fd, method, "501", "Not Implemented", "Tiny does not implement this method");
     return;
@@ -123,7 +124,7 @@ void read_requesthdrs(rio_t *rp) {
 }
 
 /*
- * parse_uri - URIparse URI into filename and CGI args
+ * parse_uri - URI 파싱해서 파일명, CGI 인수 꺼내기
  * @return
  *  0: dynamic content
  *  1: static content
@@ -188,7 +189,7 @@ void serve_static(int fd, char *filename, int filesize, char *method) {
   // Rio_writen(fd, srcp, filesize);
   // Munmap(srcp, filesize);
 
-  // 연습문제 11.9
+  // 숙제문제 11.9
   srcfd = Open(filename, O_RDONLY, 0);
   srcp = (char*)malloc(filesize);
   Rio_readn(srcfd, srcp, filesize);
@@ -211,6 +212,7 @@ void get_filetype(char *filename, char *filetype) {
       strcpy(filetype, "image/gif");
     } else if (strcmp(ext, ".jpg") == 0 || strcmp(ext, ".jpeg") == 0) {
       strcpy(filetype, "image/jpeg");
+    // 숙제문제 11.7
     } else if (strcmp(ext, ".mp4") == 0) {
       strcpy(filetype, "video/mp4");
     } else {

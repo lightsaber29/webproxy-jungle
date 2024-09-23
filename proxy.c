@@ -12,40 +12,58 @@ static const char *user_agent_hdr =
 
 /* prototypes */
 void doit(int fd);
+void *thread(void *vargp);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *hostname, char *pathname, char *port);
 
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
 int main(int argc, char **argv) {
-  printf("%s", user_agent_hdr);
-
-  // signal(SIGPIPE, SIG_IGN);
-  int listenfd, connfd;
+  int listenfd, *connfd;
   char hostname[MAXLINE], port[MAXLINE];
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
+  pthread_t tid;
 
-  /* 실행 시 인수로 포트번호가 들어오지 않았을 경우 exit */
+  // 실행 시 인수로 포트번호가 들어오지 않았을 경우 exit
   if (argc != 2) {
     fprintf(stderr, "usage: %s <port>\n", argv[0]);
     exit(1);
   }
 
+  // 서버 소켓 열기
   listenfd = Open_listenfd(argv[1]);
+
   while (1) {
     clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); // line:netp:tiny:accept
+    // connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
+    connfd = Malloc(sizeof(int));
+    *connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
     printf("Accepted connection from (%s, %s)\n", hostname, port);
-    // 요청 읽기
-    doit(connfd);  // line:netp:tiny:doit
-    Close(connfd); // line:netp:tiny:close
+    // 쓰레드에서 요청 읽기 및 처리
+    Pthread_create(&tid, NULL, thread, connfd);
   }
 }
 
 /*
- * doit - handle one HTTP request/response transaction
+ * thread - 쓰레드를 분리해서 클라이언트의 요청을 처리하고, 완료 후 연결을 닫음
+ */
+void *thread(void *vargp) {
+  int connfd = *((int *)vargp);
+  // 쓰레드 분리
+  Pthread_detach((pthread_self()));
+  // 동적할당 해제
+  Free(vargp);
+  // 클라이언트 요청 처리
+  doit(connfd);
+  // 연결 닫기
+  Close(connfd);
+  return NULL;
+}
+
+/*
+ * doit - 한 개의 HTTP transaction 을 처리
  */
 void doit(int fd) {
   signal(SIGPIPE, SIG_IGN);
@@ -124,13 +142,13 @@ int parse_uri(char *uri, char *hostname, char *pathname, char *port) {
 }
 
 /*
- * read_requesthdrs - read and parse HTTP request headers
+ * read_requesthdrs - HTTP request headers 를 읽고 파싱
  */
 void read_requesthdrs(rio_t *rp) {
   char buf[MAXLINE];
 
   Rio_readlineb(rp, buf, MAXLINE);
-  while (strcmp(buf, "\r\n")) { // line:netp:readhdrs:checkterm
+  while (strcmp(buf, "\r\n")) {
     Rio_readlineb(rp, buf, MAXLINE);
     printf("%s", buf);
   }
